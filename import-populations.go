@@ -21,7 +21,7 @@ type row struct {
 func importPopulations() {
 	ctx := context.Background()
 
-	f, err := os.Open("./data/counties-populations.csv")
+	f, err := os.Open("./data/states-populations.csv")
 	if err != nil {
 		panic(err)
 	}
@@ -32,7 +32,7 @@ func importPopulations() {
 		panic(err)
 	}
 
-	api := db.Collection("counties-api")
+	api := db.Collection("states-api")
 
 	reader := csv.NewReader(f)
 	reader.Comma = ','
@@ -87,14 +87,14 @@ func importPopulations() {
 }
 
 func processRow(data []string) row {
-	pstr := data[2]
+	pstr := data[3]
 	population, err := strconv.Atoi(pstr)
 	if err != nil {
 		panic(err)
 	}
 
 	return row{
-		fips:       data[3],
+		fips:       data[1],
 		population: population,
 	}
 }
