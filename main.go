@@ -5,5 +5,5 @@ import (
 )
 
 func main() {
-	states.ImportHistorical()
+	states.ImportHistoricalCounty()
 }

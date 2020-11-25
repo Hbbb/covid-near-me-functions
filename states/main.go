@@ -50,8 +50,7 @@ func getCurrentOffset(ctx context.Context, url string) int {
 	return len - 1
 }
 
-func ImportHistorical() {
-	url := "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"
+func ImportHistorical(scope string, collectionName string, url string) {
 	ctx := context.Background()
 
 	db, err := createDBClient(ctx)
@@ -59,7 +58,7 @@ func ImportHistorical() {
 		panic(err)
 	}
 
-	previousOffset := getPreviousOffset(ctx, db, "state", url)
+	previousOffset := getPreviousOffset(ctx, db, scope, url)
 	// currentOffset := getCurrentOffset(ctx, url)
 
 	client := &http.Client{}
@@ -94,7 +93,7 @@ func ImportHistorical() {
 			panic(err)
 		}
 
-		if firstLine {
+		if firstLine && previousOffset == 0 {
 			firstLine = false
 			continue
 		}
@@ -103,8 +102,9 @@ func ImportHistorical() {
 		go func(d []string, w *sync.WaitGroup) {
 			row := processRow(d)
 
-			log.Println("processing row", row.Date)
-			collection := db.Collection("states-historical")
+			fmt.Print(".")
+			// log.Println("processing row", row.Fips+"_"+row.Date)
+			collection := db.Collection(collectionName)
 			if _, err := collection.Doc(row.Fips+"_"+row.Date).Set(ctx, row); err != nil {
 				panic(err)
 			}
@@ -114,7 +114,7 @@ func ImportHistorical() {
 
 	length := resp.Header["Content-Length"]
 
-	_, err = db.Collection("offsets").Doc("state").Update(ctx, []firestore.Update{{
+	_, err = db.Collection("offsets").Doc(scope).Update(ctx, []firestore.Update{{
 		Path:  "offset",
 		Value: length,
 	}})
@@ -126,8 +126,17 @@ func ImportHistorical() {
 	wg.Wait()
 }
 
+func ImportHistoricalState() {
+	ImportHistorical("state", "states-historical", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv")
+}
+
+func ImportHistoricalCounty() {
+	ImportHistorical("county", "counties-historical", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+}
+
 type stateHistorical struct {
 	Date   string
+	County string
 	State  string
 	Fips   string
 	Cases  string
@@ -137,10 +146,11 @@ type stateHistorical struct {
 func processRow(row []string) stateHistorical {
 	return stateHistorical{
 		Date:   row[0],
-		State:  row[1],
-		Fips:   row[2],
-		Cases:  row[3],
-		Deaths: row[4],
+		County: row[1],
+		State:  row[2],
+		Fips:   row[3],
+		Cases:  row[4],
+		Deaths: row[5],
 	}
 }
 
