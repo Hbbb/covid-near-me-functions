@@ -1,9 +1,9 @@
 package main
 
 import (
-	states "github.com/hbbb/covid-near-me-functions/states"
+	p "github.com/hbbb/covid-near-me-functions/live"
 )
 
 func main() {
-	states.ImportHistoricalCounty()
+	p.ImportLiveCounties()
 }
