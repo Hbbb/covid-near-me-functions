@@ -34,14 +34,14 @@ type Row struct {
 }
 
 func StoreActiveCasesForState(ctx context.Context, message interface{}) {
-	StoreActiveCases(ctx, "states")
+	storeActiveCases(ctx, "states")
 }
 
 func StoreActiveCasesForCounty(ctx context.Context, message interface{}) {
-	StoreActiveCases(ctx, "counties")
+	storeActiveCases(ctx, "counties")
 }
 
-func StoreActiveCases(ctx context.Context, collectionPrefix string) {
+func storeActiveCases(ctx context.Context, collectionPrefix string) {
 	db, err := createDBClient(ctx)
 	if err != nil {
 		panic(err)
@@ -68,7 +68,7 @@ func StoreActiveCases(ctx context.Context, collectionPrefix string) {
 		wg.Add(1)
 		go func(row Row) {
 			log.Println("processing", row.Fips)
-			if err := CalculateActiveCases(ctx, collectionPrefix, row); err == nil {
+			if err := calculateActiveCases(ctx, collectionPrefix, row); err == nil {
 				log.Println("finished", row.Fips)
 			} else {
 				log.Println("failed", row.Fips)
@@ -80,7 +80,7 @@ func StoreActiveCases(ctx context.Context, collectionPrefix string) {
 	wg.Wait()
 }
 
-func CalculateActiveCases(ctx context.Context, collectionPrefix string, row Row) error {
+func calculateActiveCases(ctx context.Context, collectionPrefix string, row Row) error {
 	db, err := createDBClient(ctx)
 	if err != nil {
 		panic(err)
@@ -132,19 +132,27 @@ func CalculateActiveCases(ctx context.Context, collectionPrefix string, row Row)
 		daysAgo49Cases,
 		deaths)
 
-	row.ActiveCases = activeCaseCount
-	row.NewCasesToday = currentCases - daysAgo1Cases
-	row.NewDeathsToday = deaths - daysAgo1Deaths
-
-	if _, err = api.Set(ctx, row); err != nil {
+	if _, err = api.Set(ctx, map[string]interface{}{
+		"Date":            row.Date,
+		"County":          row.County,
+		"State":           row.State,
+		"Fips":            row.Fips,
+		"Cases":           row.Cases,
+		"Deaths":          row.Deaths,
+		"ConfirmedCases":  row.ConfirmedCases,
+		"ConfirmedDeaths": row.ConfirmedDeaths,
+		"ProbableCases":   row.ProbableCases,
+		"ProbableDeaths":  row.ProbableDeaths,
+		// Calculated fields
+		"ActiveCases":    activeCaseCount,
+		"NewCasesToday":  currentCases - daysAgo1Cases,
+		"NewDeathsToday": deaths - daysAgo1Deaths,
+	}, firestore.MergeAll); err != nil {
 		panic(err)
 	}
 
 	return nil
 }
-
-// func ComputeNewCasesToday()
-// func ComputeNewDeathsToday()
 
 func computeActiveCaseCount(current, days14, days15, days25, days26, days49, deaths int) int {
 	return int(
