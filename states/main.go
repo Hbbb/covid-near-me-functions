@@ -17,28 +17,24 @@ func ImportDaily() {
 
 }
 
-func ImportHistorical() {
-	url := "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"
-	ctx := context.Background()
-
-	db, err := createDBClient(ctx)
-	if err != nil {
-		panic(err)
-	}
-
+func getPreviousOffset(ctx context.Context, db *firestore.Client, scope string, url string) int64 {
 	// fetch previous stopping point
-	docsnap, err := db.Collection("offsets").Doc("state").Get(ctx)
+	doc, err := db.Collection("offsets").Doc(scope).Get(ctx)
 	if err != nil {
 		panic(err)
 	}
 
-	o, err := docsnap.DataAt("offset")
+	o, err := doc.DataAt("offset")
 	if err != nil {
 		panic(err)
 	}
 
-	offset := o.(int)
+	offset := o.(int64)
 
+	return offset
+}
+
+func getCurrentOffset(ctx context.Context, url string) int {
 	h, err := http.Head(url)
 	if err != nil {
 		panic(err)
@@ -51,15 +47,35 @@ func ImportHistorical() {
 		panic(err)
 	}
 
+	return len - 1
+}
+
+func ImportHistorical() {
+	url := "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"
+	ctx := context.Background()
+
+	db, err := createDBClient(ctx)
+	if err != nil {
+		panic(err)
+	}
+
+	previousOffset := getPreviousOffset(ctx, db, "state", url)
+	// currentOffset := getCurrentOffset(ctx, url)
+
 	client := &http.Client{}
 	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", offset, len-1))
+	req.Header.Set("Range", fmt.Sprintf("bytes=%d-", previousOffset))
 
 	resp, err := client.Do(req)
 	if err != nil {
 		panic(err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == 416 {
+		log.Println("No new data in file.")
+		return
+	}
 
 	reader := csv.NewReader(resp.Body)
 	reader.Comma = ','
@@ -97,7 +113,15 @@ func ImportHistorical() {
 	}
 
 	length := resp.Header["Content-Length"]
-	db.Collection("offsets").Doc().Set(ctx)
+
+	_, err = db.Collection("offsets").Doc("state").Update(ctx, []firestore.Update{{
+		Path:  "offset",
+		Value: length,
+	}})
+
+	if err != nil {
+		panic(err)
+	}
 
 	wg.Wait()
 }
