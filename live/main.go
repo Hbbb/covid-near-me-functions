@@ -26,25 +26,25 @@ type row struct {
 type processor func([]string) row
 
 // ImportLiveCounties imports live data for every county in the US
-func ImportLiveCounties() {
-	importLive("counties-live", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/live/us-counties.csv", processCountyRow)
+func ImportLiveCounties() error {
+	return importLive("counties-live", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/live/us-counties.csv", processCountyRow)
 }
 
 // ImportLiveStates imports live data for every state in the US
-func ImportLiveStates() {
-	importLive("states-live", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/live/us-states.csv", processStateRow)
+func ImportLiveStates() error {
+	return importLive("states-live", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/live/us-states.csv", processStateRow)
 }
 
-func importLive(collectionName string, url string, processRow processor) {
+func importLive(collectionName string, url string, processRow processor) error {
 	ctx := context.Background()
 	db, err := createDBClient(ctx)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	resp, err := http.Get(url)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	reader := csv.NewReader(resp.Body)
@@ -59,7 +59,7 @@ func importLive(collectionName string, url string, processRow processor) {
 		}
 
 		if err != nil {
-			panic(err)
+			return err
 		}
 
 		if firstLine {
@@ -85,6 +85,7 @@ func importLive(collectionName string, url string, processRow processor) {
 	}
 
 	wg.Wait()
+	return nil
 }
 
 func processStateRow(r []string) row {
