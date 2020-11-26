@@ -125,11 +125,11 @@ func ImportHistorical(scope string, collectionName string, url string, processRo
 	wg.Wait()
 }
 
-func ImportHistoricalState(ctx context.Context, message interface{}) {
+func ImportStatesHistorical(ctx context.Context, message interface{}) {
 	ImportHistorical("state", "states-historical", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv", processStateRow)
 }
 
-func ImportHistoricalCounty(ctx context.Context, message interface{}) {
+func ImportCountiesHistorical(ctx context.Context, message interface{}) {
 	ImportHistorical("county", "counties-historical", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv", processCountyRow)
 }
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"sync"
 
 	"cloud.google.com/go/firestore"
@@ -14,8 +13,8 @@ import (
 )
 
 type row struct {
-	fips       string
-	population int
+	fips   string
+	abbrev string
 }
 
 func importPopulations() {
@@ -38,7 +37,7 @@ func importPopulations() {
 	reader.Comma = ','
 
 	firstLine := true
-	populations := make(map[string]int)
+	abbrevs := make(map[string]string)
 	for {
 		data, err := reader.Read()
 		if err == io.EOF {
@@ -54,7 +53,7 @@ func importPopulations() {
 			continue
 		}
 		row := processRow(data)
-		populations[row.fips] = row.population
+		abbrevs[row.fips] = row.abbrev
 	}
 
 	iter := api.Documents(ctx)
@@ -76,7 +75,7 @@ func importPopulations() {
 
 			fmt.Print(".")
 			doc.Ref.Set(ctx, map[string]interface{}{
-				"Population": populations[fips],
+				"Abbreviation": abbrevs[fips],
 			}, firestore.MergeAll)
 
 			wg.Done()
@@ -87,15 +86,9 @@ func importPopulations() {
 }
 
 func processRow(data []string) row {
-	pstr := data[3]
-	population, err := strconv.Atoi(pstr)
-	if err != nil {
-		panic(err)
-	}
-
 	return row{
-		fips:       data[1],
-		population: population,
+		fips:   data[1],
+		abbrev: data[0],
 	}
 }
 
