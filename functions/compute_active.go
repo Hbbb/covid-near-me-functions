@@ -72,7 +72,6 @@ func storeActiveCases(ctx context.Context, collectionPrefix string) error {
 
 		wg.Add(1)
 
-		fmt.Println("processing", row.State, row.County)
 		go func(row computedRow) {
 			if err := calculateActiveCases(ctx, collectionPrefix, row); err != nil {
 				fmt.Println("failed to calculate active cases for", row.State, row.County)
