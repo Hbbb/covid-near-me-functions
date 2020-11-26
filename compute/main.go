@@ -2,6 +2,7 @@ package p
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strconv"
 	"sync"
@@ -164,7 +165,12 @@ func getCasesFromDaysAgo(ctx context.Context, fips string, daysAgo int, fieldNam
 		panic(err)
 	}
 
+	fmt.Println("time.Now", time.Now())
+	fmt.Println("time.UTC", time.Now().UTC())
+
 	today = today.In(location)
+	fmt.Println("time.EST", today)
+
 	date := today.AddDate(0, 0, -daysAgo).Format(layoutISO)
 
 	docsnap, err := cases.Doc(fips + "_" + date).Get(ctx)
