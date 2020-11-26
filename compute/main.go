@@ -67,11 +67,9 @@ func storeActiveCases(ctx context.Context, collectionPrefix string) error {
 
 		wg.Add(1)
 		go func(row Row) {
-			log.Println("processing", row.Fips)
-			if err := calculateActiveCases(ctx, collectionPrefix, row); err == nil {
-				log.Println("finished", row.Fips)
-			} else {
+			if err := calculateActiveCases(ctx, collectionPrefix, row); err != nil {
 				log.Println("failed", row.Fips)
+				log.Println(err)
 			}
 			wg.Done()
 		}(row)
