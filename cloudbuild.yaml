@@ -1,0 +1,73 @@
+steps:
+  - name: gcr.io/cloud-builders/gcloud
+    args:
+      [
+        "functions",
+        "deploy",
+        "import-states-historical",
+        "--source",
+        "https://source.developers.google.com/projects/covid-near-me-296621/repos/github_hbbb_covid-near-me-functions/moveable-aliases/main/paths/functions",
+        "--entry-point",
+        "ImportStatesHistorical"
+      ]
+    dir: functions
+  - name: gcr.io/cloud-builders/gcloud
+    args:
+      [
+        "functions",
+        "deploy",
+        "import-counties-historical",
+        "--source",
+        "https://source.developers.google.com/projects/covid-near-me-296621/repos/github_hbbb_covid-near-me-functions/moveable-aliases/main/paths/functions",
+        "--entry-point",
+        "ImportCountiesHistorical"
+      ]
+    dir: functions
+  - name: gcr.io/cloud-builders/gcloud
+    args:
+      [
+        "functions",
+        "deploy",
+        "import-states-live",
+        "--source",
+        "https://source.developers.google.com/projects/covid-near-me-296621/repos/github_hbbb_covid-near-me-functions/moveable-aliases/main/paths/functions",
+        "--entry-point",
+        "ImportLiveStates"
+      ]
+    dir: functions
+  - name: gcr.io/cloud-builders/gcloud
+    args:
+      [
+        "functions",
+        "deploy",
+        "import-counties-live",
+        "--source",
+        "https://source.developers.google.com/projects/covid-near-me-296621/repos/github_hbbb_covid-near-me-functions/moveable-aliases/main/paths/functions",
+        "--entry-point",
+        "ImportLiveCounties"
+      ]
+    dir: functions
+  - name: gcr.io/cloud-builders/gcloud
+    args:
+      [
+        "functions",
+        "deploy",
+        "compute-states-api",
+        "--source",
+        "https://source.developers.google.com/projects/covid-near-me-296621/repos/github_hbbb_covid-near-me-functions/moveable-aliases/main/paths/functions",
+        "--entry-point",
+        "StoreActiveCasesForState"
+      ]
+    dir: functions
+  - name: gcr.io/cloud-builders/gcloud
+    args:
+      [
+        "functions",
+        "deploy",
+        "compute-counties-api",
+        "--source",
+        "https://source.developers.google.com/projects/covid-near-me-296621/repos/github_hbbb_covid-near-me-functions/moveable-aliases/main/paths/functions",
+        "--entry-point",
+        "StoreActiveCasesForCounty"
+      ]
+    dir: functions
