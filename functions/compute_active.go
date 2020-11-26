@@ -49,11 +49,9 @@ func storeActiveCases(ctx context.Context, collectionPrefix string) error {
 
 	for {
 		doc, err := iter.Next()
-
 		if err == iterator.Done {
 			break
 		}
-
 		if err != nil {
 			sentry.CaptureException(err)
 			return err
@@ -159,6 +157,8 @@ func calculateActiveCases(ctx context.Context, collectionPrefix string, row comp
 	return nil
 }
 
+// active case algorithm, taken from:
+// https://www.esri.com/arcgis-blog/products/js-api-arcgis/mapping/animate-and-explore-covid-19-data-through-time/#active
 func computeActiveCaseCount(current, days14, days15, days25, days26, days49, deaths int) int {
 	return int(
 		float32(current-days14) + (0.19 * float32(days15-days25)) + (0.05 * float32(days26-days49)) - float32(deaths),
@@ -192,7 +192,6 @@ func getCasesFromDaysAgo(ctx context.Context, fips string, daysAgo int, fieldNam
 
 func fetchNumericFieldFromDoc(doc *firestore.DocumentSnapshot, fieldName string) (int, error) {
 	data, err := doc.DataAt(fieldName)
-
 	if err != nil {
 		sentry.CaptureException(err)
 		panic(err)
@@ -201,7 +200,6 @@ func fetchNumericFieldFromDoc(doc *firestore.DocumentSnapshot, fieldName string)
 	cast := data.(string)
 
 	i, err := strconv.Atoi(cast)
-
 	if err != nil {
 		sentry.CaptureException(err)
 		return 0, err
@@ -218,8 +216,12 @@ func getLiveNumbers(ctx context.Context, fips string, doc *firestore.DocumentRef
 	}
 
 	rawCases, err := fetchNumericFieldFromDoc(docsnap, "Cases")
-	rawDeaths, err := fetchNumericFieldFromDoc(docsnap, "Deaths")
+	if err != nil {
+		sentry.CaptureException(err)
+		return 0, 0, err
+	}
 
+	rawDeaths, err := fetchNumericFieldFromDoc(docsnap, "Deaths")
 	if err != nil {
 		sentry.CaptureException(err)
 		return 0, 0, err

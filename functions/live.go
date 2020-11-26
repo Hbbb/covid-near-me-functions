@@ -58,7 +58,6 @@ func importLive(collectionName string, url string, processRow processor) error {
 		if err == io.EOF {
 			break
 		}
-
 		if err != nil {
 			sentry.CaptureException(err)
 			return err

@@ -1,17 +1,22 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"time"
+
+	funcs "github.com/hbbb/covid-near-me-functions/functions"
 )
 
 func main() {
-	// ctx := context.Background()
+	ctx := context.Background()
 	// p.ImportHistoricalCounty(ctx, "")
 	// p.StoreActiveCasesForCounty(ctx, "")
 	// p.ImportLiveCounties()
 
 	// importPopulations()
+
+	funcs.ImportCountiesHistorical(ctx, map[string]interface{}{})
 
 	loc, err := time.LoadLocation("America/New_York")
 

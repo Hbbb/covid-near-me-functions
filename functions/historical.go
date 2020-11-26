@@ -72,7 +72,6 @@ func importHistorical(scope string, collectionName string, url string, processRo
 		if err == io.EOF {
 			break
 		}
-
 		if err != nil {
 			sentry.CaptureException(err)
 			return err
@@ -104,7 +103,6 @@ func importHistorical(scope string, collectionName string, url string, processRo
 		Path:  "offset",
 		Value: length,
 	}})
-
 	if err != nil {
 		sentry.CaptureException(err)
 		return nil
