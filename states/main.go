@@ -50,12 +50,12 @@ func getCurrentOffset(ctx context.Context, url string) int {
 	return len
 }
 
-func ImportHistorical(scope string, collectionName string, url string, processRow func([]string) Row) {
+func ImportHistorical(scope string, collectionName string, url string, processRow func([]string) Row) error {
 	ctx := context.Background()
 
 	db, err := createDBClient(ctx)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	previousOffset := getPreviousOffset(ctx, db, scope, url)
@@ -66,13 +66,13 @@ func ImportHistorical(scope string, collectionName string, url string, processRo
 
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 416 {
 		log.Println("No new data in file.")
-		return
+		return nil
 	}
 
 	reader := csv.NewReader(resp.Body)
@@ -89,7 +89,7 @@ func ImportHistorical(scope string, collectionName string, url string, processRo
 		}
 
 		if err != nil {
-			panic(err)
+			return err
 		}
 
 		if firstLine && previousOffset == 0 {
@@ -119,18 +119,19 @@ func ImportHistorical(scope string, collectionName string, url string, processRo
 	}})
 
 	if err != nil {
-		panic(err)
+		return nil
 	}
 
 	wg.Wait()
+	return nil
 }
 
-func ImportStatesHistorical(ctx context.Context, message interface{}) {
-	ImportHistorical("state", "states-historical", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv", processStateRow)
+func ImportStatesHistorical(ctx context.Context, message interface{}) error {
+	return ImportHistorical("state", "states-historical", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv", processStateRow)
 }
 
-func ImportCountiesHistorical(ctx context.Context, message interface{}) {
-	ImportHistorical("county", "counties-historical", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv", processCountyRow)
+func ImportCountiesHistorical(ctx context.Context, message interface{}) error {
+	return ImportHistorical("county", "counties-historical", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv", processCountyRow)
 }
 
 type Row struct {
