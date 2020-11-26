@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
+
 	p "github.com/hbbb/covid-near-me-functions/compute"
 )
 
 func main() {
-	p.StoreActiveCasesForState()
+	ctx := context.Background()
+	// p.ImportHistoricalCounty(ctx, "")
+	p.StoreActiveCasesForCounty(ctx, "")
 }

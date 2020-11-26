@@ -47,10 +47,10 @@ func getCurrentOffset(ctx context.Context, url string) int {
 		panic(err)
 	}
 
-	return len - 1
+	return len
 }
 
-func ImportHistorical(scope string, collectionName string, url string) {
+func ImportHistorical(scope string, collectionName string, url string, processRow func([]string) Row) {
 	ctx := context.Background()
 
 	db, err := createDBClient(ctx)
@@ -59,7 +59,6 @@ func ImportHistorical(scope string, collectionName string, url string) {
 	}
 
 	previousOffset := getPreviousOffset(ctx, db, scope, url)
-	// currentOffset := getCurrentOffset(ctx, url)
 
 	client := &http.Client{}
 	req, _ := http.NewRequest("GET", url, nil)
@@ -112,7 +111,7 @@ func ImportHistorical(scope string, collectionName string, url string) {
 		}(data, &wg)
 	}
 
-	length := resp.Header["Content-Length"]
+	length := getCurrentOffset(ctx, url)
 
 	_, err = db.Collection("offsets").Doc(scope).Update(ctx, []firestore.Update{{
 		Path:  "offset",
@@ -126,15 +125,15 @@ func ImportHistorical(scope string, collectionName string, url string) {
 	wg.Wait()
 }
 
-func ImportHistoricalState() {
-	ImportHistorical("state", "states-historical", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv")
+func ImportHistoricalState(ctx context.Context, message interface{}) {
+	ImportHistorical("state", "states-historical", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv", processStateRow)
 }
 
-func ImportHistoricalCounty() {
-	ImportHistorical("county", "counties-historical", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+func ImportHistoricalCounty(ctx context.Context, message interface{}) {
+	ImportHistorical("county", "counties-historical", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv", processCountyRow)
 }
 
-type stateHistorical struct {
+type Row struct {
 	Date   string
 	County string
 	State  string
@@ -143,8 +142,18 @@ type stateHistorical struct {
 	Deaths string
 }
 
-func processRow(row []string) stateHistorical {
-	return stateHistorical{
+func processStateRow(row []string) Row {
+	return Row{
+		Date:   row[0],
+		State:  row[1],
+		Fips:   row[2],
+		Cases:  row[3],
+		Deaths: row[4],
+	}
+}
+
+func processCountyRow(row []string) Row {
+	return Row{
 		Date:   row[0],
 		County: row[1],
 		State:  row[2],
