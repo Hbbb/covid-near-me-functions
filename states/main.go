@@ -124,7 +124,7 @@ func importHistorical(scope string, collectionName string, url string, processRo
 	return nil
 }
 
-func getPreviousOffset(ctx context.Context, db *firestore.Client, scope string, url string, sentry ) int64 {
+func getPreviousOffset(ctx context.Context, db *firestore.Client, scope string, url string) int64 {
 	// fetch previous stopping point
 	doc, err := db.Collection("offsets").Doc(scope).Get(ctx)
 	if err != nil {
