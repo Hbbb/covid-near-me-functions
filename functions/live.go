@@ -3,6 +3,7 @@ package functions
 import (
 	"context"
 	"encoding/csv"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -38,11 +39,12 @@ func importLive(collectionName string, url string, processRow processor) error {
 	db, err := createDBClient(ctx)
 	if err != nil {
 		sentry.CaptureException(err)
-		return err
+		panic(err)
 	}
 
 	resp, err := http.Get(url)
 	if err != nil {
+		fmt.Println("http request failed (likely a connectivity problem)", collectionName)
 		sentry.CaptureException(err)
 		return err
 	}
@@ -59,6 +61,7 @@ func importLive(collectionName string, url string, processRow processor) error {
 			break
 		}
 		if err != nil {
+			fmt.Println("error reading CSV line")
 			sentry.CaptureException(err)
 			return err
 		}
@@ -79,6 +82,7 @@ func importLive(collectionName string, url string, processRow processor) error {
 
 			collection := db.Collection(collectionName)
 			if _, err := collection.Doc(row.Fips).Set(ctx, row); err != nil {
+				fmt.Println("failed to write document", collectionName)
 				sentry.CaptureException(err)
 				panic(err)
 			}
