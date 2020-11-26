@@ -5,7 +5,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -50,13 +49,14 @@ func importHistorical(scope string, collectionName string, url string, processRo
 
 	resp, err := client.Do(req)
 	if err != nil {
+		fmt.Println("http request failed (likely a connectivity problem)", collectionName)
 		sentry.CaptureException(err)
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 416 {
-		log.Println("No new data in file.")
+		fmt.Println("No new data in file", collectionName)
 		return nil
 	}
 
@@ -73,6 +73,7 @@ func importHistorical(scope string, collectionName string, url string, processRo
 			break
 		}
 		if err != nil {
+			fmt.Println("error reading CSV line")
 			sentry.CaptureException(err)
 			return err
 		}
@@ -86,10 +87,9 @@ func importHistorical(scope string, collectionName string, url string, processRo
 		go func(d []string, w *sync.WaitGroup) {
 			row := processRow(d)
 
-			fmt.Print(".")
-			// log.Println("processing row", row.Fips+"_"+row.Date)
 			collection := db.Collection(collectionName)
 			if _, err := collection.Doc(row.Fips+"_"+row.Date).Set(ctx, row); err != nil {
+				fmt.Println("failed to write document", collectionName)
 				sentry.CaptureException(err)
 				panic(err)
 			}
@@ -104,6 +104,7 @@ func importHistorical(scope string, collectionName string, url string, processRo
 		Value: length,
 	}})
 	if err != nil {
+		fmt.Println("failed to update offset", scope)
 		sentry.CaptureException(err)
 		return nil
 	}
@@ -116,18 +117,21 @@ func getPreviousOffset(ctx context.Context, db *firestore.Client, scope string, 
 	// fetch previous stopping point
 	doc, err := db.Collection("offsets").Doc(scope).Get(ctx)
 	if err != nil {
+		fmt.Println("failed to fetch offsets document")
 		sentry.CaptureException(err)
 		panic(err)
 	}
 
 	o, err := doc.DataAt("offset")
 	if err != nil {
+		fmt.Println("failed to fetch offset value from document")
 		sentry.CaptureException(err)
 		panic(err)
 	}
 
 	offset := o.(int64)
 
+	fmt.Println("offset", offset)
 	return offset
 }
 
