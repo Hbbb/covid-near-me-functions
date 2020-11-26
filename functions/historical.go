@@ -1,4 +1,4 @@
-package p
+package functions
 
 import (
 	"context"
@@ -16,27 +16,17 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
-// Row is a row
-type Row struct {
-	Date   string
-	County string
-	State  string
-	Fips   string
-	Cases  string
-	Deaths string
-}
-
 // ImportStatesHistorical Cloud Function
 func ImportStatesHistorical(ctx context.Context, message interface{}) error {
-	return importHistorical("state", "states-historical", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv", processStateRow)
+	return importHistorical("state", "states-historical", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv", processHistoricalStateRow)
 }
 
 // ImportCountiesHistorical Cloud Function
 func ImportCountiesHistorical(ctx context.Context, message interface{}) error {
-	return importHistorical("county", "counties-historical", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv", processCountyRow)
+	return importHistorical("county", "counties-historical", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv", processHistoricalCountyRow)
 }
 
-func importHistorical(scope string, collectionName string, url string, processRow func([]string) Row) error {
+func importHistorical(scope string, collectionName string, url string, processRow func([]string) historicalRow) error {
 	ctx := context.Background()
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn: os.Getenv("SENTRY_DSN"),
@@ -161,8 +151,8 @@ func getCurrentOffset(ctx context.Context, url string) int {
 	return len
 }
 
-func processStateRow(row []string) Row {
-	return Row{
+func processHistoricalStateRow(row []string) historicalRow {
+	return historicalRow{
 		Date:   row[0],
 		State:  row[1],
 		Fips:   row[2],
@@ -171,8 +161,8 @@ func processStateRow(row []string) Row {
 	}
 }
 
-func processCountyRow(row []string) Row {
-	return Row{
+func processHistoricalCountyRow(row []string) historicalRow {
+	return historicalRow{
 		Date:   row[0],
 		County: row[1],
 		State:  row[2],
@@ -180,16 +170,4 @@ func processCountyRow(row []string) Row {
 		Cases:  row[4],
 		Deaths: row[5],
 	}
-}
-
-func createDBClient(ctx context.Context) (*firestore.Client, error) {
-	projectID := "covid-near-me-296621"
-
-	client, err := firestore.NewClient(ctx, projectID)
-	if err != nil {
-		sentry.CaptureException(err)
-		return nil, err
-	}
-
-	return client, nil
 }

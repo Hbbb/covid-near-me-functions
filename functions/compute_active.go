@@ -1,4 +1,4 @@
-package p
+package functions
 
 import (
 	"context"
@@ -18,26 +18,12 @@ const (
 	layoutISO = "2006-01-02"
 )
 
-type Row struct {
-	Date            string
-	County          string
-	State           string
-	Fips            string
-	Cases           string
-	Deaths          string
-	ConfirmedCases  string
-	ConfirmedDeaths string
-	ProbableCases   string
-	ProbableDeaths  string
-	ActiveCases     int
-	NewCasesToday   int
-	NewDeathsToday  int
-}
-
+// StoreActiveCasesForState Cloud Function
 func StoreActiveCasesForState(ctx context.Context, message interface{}) error {
 	return storeActiveCases(ctx, "states")
 }
 
+// StoreActiveCasesForCounty Cloud Function
 func StoreActiveCasesForCounty(ctx context.Context, message interface{}) error {
 	return storeActiveCases(ctx, "counties")
 }
@@ -73,11 +59,11 @@ func storeActiveCases(ctx context.Context, collectionPrefix string) error {
 			return err
 		}
 
-		var row Row
+		var row computedRow
 		doc.DataTo(&row)
 
 		wg.Add(1)
-		go func(row Row) {
+		go func(row computedRow) {
 			if err := calculateActiveCases(ctx, collectionPrefix, row); err != nil {
 				log.Println("failed", row.Fips)
 				log.Println(err)
@@ -90,7 +76,7 @@ func storeActiveCases(ctx context.Context, collectionPrefix string) error {
 	return nil
 }
 
-func calculateActiveCases(ctx context.Context, collectionPrefix string, row Row) error {
+func calculateActiveCases(ctx context.Context, collectionPrefix string, row computedRow) error {
 	db, err := createDBClient(ctx)
 	if err != nil {
 		sentry.CaptureException(err)
@@ -240,16 +226,4 @@ func getLiveNumbers(ctx context.Context, fips string, doc *firestore.DocumentRef
 	}
 
 	return rawCases, rawDeaths, nil
-}
-
-func createDBClient(ctx context.Context) (*firestore.Client, error) {
-	projectID := "covid-near-me-296621"
-
-	client, err := firestore.NewClient(ctx, projectID)
-	if err != nil {
-		sentry.CaptureException(err)
-		return nil, err
-	}
-
-	return client, nil
 }

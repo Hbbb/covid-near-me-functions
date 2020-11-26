@@ -1,4 +1,4 @@
-package p
+package functions
 
 import (
 	"context"
@@ -9,33 +9,19 @@ import (
 	"sync"
 	"time"
 
-	"cloud.google.com/go/firestore"
 	"github.com/getsentry/sentry-go"
 )
 
-type row struct {
-	Date            string
-	County          string
-	State           string
-	Fips            string
-	Cases           string
-	Deaths          string
-	ConfirmedCases  string
-	ConfirmedDeaths string
-	ProbableCases   string
-	ProbableDeaths  string
-}
+type processor func([]string) liveRow
 
-type processor func([]string) row
-
-// ImportLiveCounties imports live data for every county in the US
+// ImportLiveCounties Cloud Function
 func ImportLiveCounties(ctx context.Context, message interface{}) error {
-	return importLive("counties-live", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/live/us-counties.csv", processCountyRow)
+	return importLive("counties-live", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/live/us-counties.csv", processLiveCountyRow)
 }
 
-// ImportLiveStates imports live data for every state in the US
+// ImportLiveStates Cloud Function
 func ImportLiveStates(ctx context.Context, message interface{}) error {
-	return importLive("states-live", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/live/us-states.csv", processStateRow)
+	return importLive("states-live", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/live/us-states.csv", processLiveStateRow)
 }
 
 func importLive(collectionName string, url string, processRow processor) error {
@@ -66,6 +52,7 @@ func importLive(collectionName string, url string, processRow processor) error {
 
 	firstLine := true
 	wg := sync.WaitGroup{}
+
 	for {
 		data, err := reader.Read()
 		if err == io.EOF {
@@ -104,8 +91,8 @@ func importLive(collectionName string, url string, processRow processor) error {
 	return nil
 }
 
-func processStateRow(r []string) row {
-	return row{
+func processLiveStateRow(r []string) liveRow {
+	return liveRow{
 		Date:            r[0],
 		State:           r[1],
 		Fips:            r[2],
@@ -118,8 +105,8 @@ func processStateRow(r []string) row {
 	}
 }
 
-func processCountyRow(r []string) row {
-	return row{
+func processLiveCountyRow(r []string) liveRow {
+	return liveRow{
 		Date:            r[0],
 		County:          r[1],
 		State:           r[2],
@@ -131,16 +118,4 @@ func processCountyRow(r []string) row {
 		ProbableCases:   r[8],
 		ProbableDeaths:  r[9],
 	}
-}
-
-func createDBClient(ctx context.Context) (*firestore.Client, error) {
-	projectID := "covid-near-me-296621"
-
-	client, err := firestore.NewClient(ctx, projectID)
-	if err != nil {
-		sentry.CaptureException(err)
-		return nil, err
-	}
-
-	return client, nil
 }
