@@ -11,8 +11,6 @@ import (
 	"google.golang.org/api/iterator"
 )
 
-var day = time.Hour * 24
-
 const (
 	layoutISO = "2006-01-02"
 )
@@ -161,10 +159,15 @@ func computeActiveCaseCount(current, days14, days15, days25, days26, days49, dea
 
 func getCasesFromDaysAgo(ctx context.Context, fips string, daysAgo int, fieldName string, cases *firestore.CollectionRef) (int, error) {
 	today := time.Now()
+	location, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		panic(err)
+	}
+
+	today = today.In(location)
 	date := today.AddDate(0, 0, -daysAgo).Format(layoutISO)
 
 	docsnap, err := cases.Doc(fips + "_" + date).Get(ctx)
-
 	if err != nil {
 		return 0, err
 	}
