@@ -3,7 +3,6 @@ package functions
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"sync"
@@ -31,7 +30,6 @@ func StoreActiveCasesForCounty(ctx context.Context, message interface{}) error {
 }
 
 func storeActiveCases(ctx context.Context, collectionPrefix string) error {
-	fmt.Println("storeActiveCases().start")
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn: os.Getenv("SENTRY_DSN"),
 	})
@@ -47,7 +45,6 @@ func storeActiveCases(ctx context.Context, collectionPrefix string) error {
 	}
 
 	cName := fmt.Sprintf("%s-live", collectionPrefix)
-	fmt.Println("fetching collection", cName)
 
 	iter := db.Collection(cName).Documents(ctx)
 	defer iter.Stop()
@@ -71,20 +68,19 @@ func storeActiveCases(ctx context.Context, collectionPrefix string) error {
 		fmt.Println("processing", row.State, row.County)
 		go func(row computedRow) {
 			if err := calculateActiveCases(ctx, collectionPrefix, row); err != nil {
-				log.Println("failed", row.State, row.County)
-				log.Println(err)
+				fmt.Println("failed to calculate active cases for", row.State, row.County)
+				fmt.Println(err)
+				sentry.CaptureException(err)
 			}
 			wg.Done()
 		}(row)
 	}
 	wg.Wait()
 
-	fmt.Println("storeActiveCases().done")
 	return nil
 }
 
 func calculateActiveCases(ctx context.Context, collectionPrefix string, row computedRow) error {
-	fmt.Println("calculateActiveCases().start")
 	db, err := createDBClient(ctx)
 	if err != nil {
 		sentry.CaptureException(err)
@@ -161,10 +157,10 @@ func calculateActiveCases(ctx context.Context, collectionPrefix string, row comp
 		"NewCasesToday":  currentCases - daysAgo1Cases,
 		"NewDeathsToday": deaths - daysAgo1Deaths,
 	}, firestore.MergeAll); err != nil {
+		sentry.CaptureException(err)
 		panic(err)
 	}
 
-	fmt.Println("calculateActiveCases().done")
 	return nil
 }
 
@@ -177,7 +173,6 @@ func computeActiveCaseCount(current, days14, days15, days25, days26, days49, dea
 }
 
 func getCasesFromDaysAgo(ctx context.Context, fips string, daysAgo int, fieldName string, cases *firestore.CollectionRef) (int, error) {
-	fmt.Println("getCasesFromDaysAgo().start")
 	today := time.Now()
 
 	location, err := time.LoadLocation("America/New_York")
@@ -186,10 +181,7 @@ func getCasesFromDaysAgo(ctx context.Context, fips string, daysAgo int, fieldNam
 		panic(err)
 	}
 
-	fmt.Println("time.Now", time.Now())
-	fmt.Println("time.UTC", time.Now().UTC())
 	today = today.In(location)
-	fmt.Println("time.EST", today)
 
 	date := today.AddDate(0, 0, -daysAgo).Format(layoutISO)
 
