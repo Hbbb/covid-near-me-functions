@@ -5,9 +5,12 @@ import (
 	"encoding/csv"
 	"io"
 	"net/http"
+	"os"
 	"sync"
+	"time"
 
 	"cloud.google.com/go/firestore"
+	"github.com/getsentry/sentry-go"
 )
 
 type row struct {
@@ -37,13 +40,24 @@ func ImportLiveStates(ctx context.Context, message interface{}) error {
 
 func importLive(collectionName string, url string, processRow processor) error {
 	ctx := context.Background()
+
+	err := sentry.Init(sentry.ClientOptions{
+		Dsn: os.Getenv("SENTRY_DSN"),
+	})
+	if err != nil {
+		panic(err)
+	}
+	defer sentry.Flush(2 * time.Second)
+
 	db, err := createDBClient(ctx)
 	if err != nil {
+		sentry.CaptureException(err)
 		return err
 	}
 
 	resp, err := http.Get(url)
 	if err != nil {
+		sentry.CaptureException(err)
 		return err
 	}
 
@@ -59,6 +73,7 @@ func importLive(collectionName string, url string, processRow processor) error {
 		}
 
 		if err != nil {
+			sentry.CaptureException(err)
 			return err
 		}
 
@@ -78,6 +93,7 @@ func importLive(collectionName string, url string, processRow processor) error {
 
 			collection := db.Collection(collectionName)
 			if _, err := collection.Doc(row.Fips).Set(ctx, row); err != nil {
+				sentry.CaptureException(err)
 				panic(err)
 			}
 			w.Done()
@@ -122,6 +138,7 @@ func createDBClient(ctx context.Context) (*firestore.Client, error) {
 
 	client, err := firestore.NewClient(ctx, projectID)
 	if err != nil {
+		sentry.CaptureException(err)
 		return nil, err
 	}
 
