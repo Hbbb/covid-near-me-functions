@@ -19,13 +19,11 @@ const (
 
 // StoreActiveCasesForState Cloud Function
 func StoreActiveCasesForState(ctx context.Context, message interface{}) error {
-	fmt.Println("StoreActiveCasesForState()")
 	return storeActiveCases(ctx, "states")
 }
 
 // StoreActiveCasesForCounty Cloud Function
 func StoreActiveCasesForCounty(ctx context.Context, message interface{}) error {
-	fmt.Println("StoreActiveCasesForCounty()")
 	return storeActiveCases(ctx, "counties")
 }
 
@@ -44,9 +42,18 @@ func storeActiveCases(ctx context.Context, collectionPrefix string) error {
 		return err
 	}
 
-	cName := fmt.Sprintf("%s-live", collectionPrefix)
+	location, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		sentry.CaptureException(err)
+		panic(err)
+	}
 
-	iter := db.Collection(cName).Documents(ctx)
+	fmt.Println("------------ TIME ZONE INFO ----------------")
+	fmt.Println("time.Now", time.Now())
+	fmt.Println("time.UTC", time.Now().UTC())
+	fmt.Println("time.In(EST)", time.Now().In(location))
+
+	iter := db.Collection(fmt.Sprintf("%s-live", collectionPrefix)).Documents(ctx)
 	defer iter.Stop()
 	wg := sync.WaitGroup{}
 
