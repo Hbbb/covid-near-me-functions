@@ -33,18 +33,18 @@ type Row struct {
 	NewDeathsToday  int
 }
 
-func StoreActiveCasesForState(ctx context.Context, message interface{}) {
-	storeActiveCases(ctx, "states")
+func StoreActiveCasesForState(ctx context.Context, message interface{}) error {
+	return storeActiveCases(ctx, "states")
 }
 
-func StoreActiveCasesForCounty(ctx context.Context, message interface{}) {
-	storeActiveCases(ctx, "counties")
+func StoreActiveCasesForCounty(ctx context.Context, message interface{}) error {
+	return storeActiveCases(ctx, "counties")
 }
 
-func storeActiveCases(ctx context.Context, collectionPrefix string) {
+func storeActiveCases(ctx context.Context, collectionPrefix string) error {
 	db, err := createDBClient(ctx)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	iter := db.Collection(collectionPrefix + "-live").Documents(ctx)
@@ -59,7 +59,7 @@ func storeActiveCases(ctx context.Context, collectionPrefix string) {
 		}
 
 		if err != nil {
-			panic(err)
+			return err
 		}
 
 		var row Row
@@ -78,6 +78,7 @@ func storeActiveCases(ctx context.Context, collectionPrefix string) {
 	}
 
 	wg.Wait()
+	return nil
 }
 
 func calculateActiveCases(ctx context.Context, collectionPrefix string, row Row) error {
