@@ -20,15 +20,18 @@ const (
 
 // StoreActiveCasesForState Cloud Function
 func StoreActiveCasesForState(ctx context.Context, message interface{}) error {
+	fmt.Println("StoreActiveCasesForState()")
 	return storeActiveCases(ctx, "states")
 }
 
 // StoreActiveCasesForCounty Cloud Function
 func StoreActiveCasesForCounty(ctx context.Context, message interface{}) error {
+	fmt.Println("StoreActiveCasesForCounty()")
 	return storeActiveCases(ctx, "counties")
 }
 
 func storeActiveCases(ctx context.Context, collectionPrefix string) error {
+	fmt.Println("storeActiveCases().start")
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn: os.Getenv("SENTRY_DSN"),
 	})
@@ -43,7 +46,10 @@ func storeActiveCases(ctx context.Context, collectionPrefix string) error {
 		return err
 	}
 
-	iter := db.Collection(collectionPrefix + "-live").Documents(ctx)
+	cName := fmt.Sprintf("%s-live", collectionPrefix)
+	fmt.Println("fetching collection", cName)
+
+	iter := db.Collection(cName).Documents(ctx)
 	defer iter.Stop()
 	wg := sync.WaitGroup{}
 
@@ -61,20 +67,24 @@ func storeActiveCases(ctx context.Context, collectionPrefix string) error {
 		doc.DataTo(&row)
 
 		wg.Add(1)
+
+		fmt.Println("processing", row.State, row.County)
 		go func(row computedRow) {
 			if err := calculateActiveCases(ctx, collectionPrefix, row); err != nil {
-				log.Println("failed", row.Fips)
+				log.Println("failed", row.State, row.County)
 				log.Println(err)
 			}
 			wg.Done()
 		}(row)
 	}
-
 	wg.Wait()
+
+	fmt.Println("storeActiveCases().done")
 	return nil
 }
 
 func calculateActiveCases(ctx context.Context, collectionPrefix string, row computedRow) error {
+	fmt.Println("calculateActiveCases().start")
 	db, err := createDBClient(ctx)
 	if err != nil {
 		sentry.CaptureException(err)
@@ -154,6 +164,7 @@ func calculateActiveCases(ctx context.Context, collectionPrefix string, row comp
 		panic(err)
 	}
 
+	fmt.Println("calculateActiveCases().done")
 	return nil
 }
 
@@ -166,7 +177,9 @@ func computeActiveCaseCount(current, days14, days15, days25, days26, days49, dea
 }
 
 func getCasesFromDaysAgo(ctx context.Context, fips string, daysAgo int, fieldName string, cases *firestore.CollectionRef) (int, error) {
+	fmt.Println("getCasesFromDaysAgo().start")
 	today := time.Now()
+
 	location, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		sentry.CaptureException(err)
@@ -175,7 +188,6 @@ func getCasesFromDaysAgo(ctx context.Context, fips string, daysAgo int, fieldNam
 
 	fmt.Println("time.Now", time.Now())
 	fmt.Println("time.UTC", time.Now().UTC())
-
 	today = today.In(location)
 	fmt.Println("time.EST", today)
 
@@ -183,6 +195,7 @@ func getCasesFromDaysAgo(ctx context.Context, fips string, daysAgo int, fieldNam
 
 	docsnap, err := cases.Doc(fips + "_" + date).Get(ctx)
 	if err != nil {
+		fmt.Println("failed to fetch case numbers for", fips+"_"+date)
 		sentry.CaptureException(err)
 		return 0, err
 	}
@@ -211,18 +224,21 @@ func fetchNumericFieldFromDoc(doc *firestore.DocumentSnapshot, fieldName string)
 func getLiveNumbers(ctx context.Context, fips string, doc *firestore.DocumentRef) (int, int, error) {
 	docsnap, err := doc.Get(ctx)
 	if err != nil {
+		fmt.Println("failed to fetch live numbers", fips)
 		sentry.CaptureException(err)
 		panic(err)
 	}
 
 	rawCases, err := fetchNumericFieldFromDoc(docsnap, "Cases")
 	if err != nil {
+		fmt.Println("failed to fetch live cases", fips)
 		sentry.CaptureException(err)
 		return 0, 0, err
 	}
 
 	rawDeaths, err := fetchNumericFieldFromDoc(docsnap, "Deaths")
 	if err != nil {
+		fmt.Println("failed to fetch live deaths", fips)
 		sentry.CaptureException(err)
 		return 0, 0, err
 	}
