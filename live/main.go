@@ -26,12 +26,12 @@ type row struct {
 type processor func([]string) row
 
 // ImportLiveCounties imports live data for every county in the US
-func ImportLiveCounties() error {
+func ImportLiveCounties(ctx context.Context, message interface{}) error {
 	return importLive("counties-live", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/live/us-counties.csv", processCountyRow)
 }
 
 // ImportLiveStates imports live data for every state in the US
-func ImportLiveStates() error {
+func ImportLiveStates(ctx context.Context, message interface{}) error {
 	return importLive("states-live", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/live/us-states.csv", processStateRow)
 }
 
