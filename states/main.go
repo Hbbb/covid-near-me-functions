@@ -126,10 +126,12 @@ func ImportHistorical(scope string, collectionName string, url string, processRo
 	return nil
 }
 
+// Cloud Function
 func ImportStatesHistorical(ctx context.Context, message interface{}) error {
 	return ImportHistorical("state", "states-historical", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv", processStateRow)
 }
 
+// Cloud Function
 func ImportCountiesHistorical(ctx context.Context, message interface{}) error {
 	return ImportHistorical("county", "counties-historical", "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv", processCountyRow)
 }
