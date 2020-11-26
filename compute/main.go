@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"sync"
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"github.com/getsentry/sentry-go"
 	"google.golang.org/api/iterator"
 )
 
@@ -41,8 +43,17 @@ func StoreActiveCasesForCounty(ctx context.Context, message interface{}) error {
 }
 
 func storeActiveCases(ctx context.Context, collectionPrefix string) error {
+	err := sentry.Init(sentry.ClientOptions{
+		Dsn: os.Getenv("SENTRY_DSN"),
+	})
+	if err != nil {
+		panic(err)
+	}
+	defer sentry.Flush(2 * time.Second)
+
 	db, err := createDBClient(ctx)
 	if err != nil {
+		sentry.CaptureException(err)
 		return err
 	}
 
@@ -58,6 +69,7 @@ func storeActiveCases(ctx context.Context, collectionPrefix string) error {
 		}
 
 		if err != nil {
+			sentry.CaptureException(err)
 			return err
 		}
 
@@ -81,6 +93,7 @@ func storeActiveCases(ctx context.Context, collectionPrefix string) error {
 func calculateActiveCases(ctx context.Context, collectionPrefix string, row Row) error {
 	db, err := createDBClient(ctx)
 	if err != nil {
+		sentry.CaptureException(err)
 		panic(err)
 	}
 
@@ -91,34 +104,42 @@ func calculateActiveCases(ctx context.Context, collectionPrefix string, row Row)
 
 	currentCases, deaths, err := getLiveNumbers(ctx, fips, live)
 	if err != nil {
+		sentry.CaptureException(err)
 		return err
 	}
 	daysAgo14Cases, err := getCasesFromDaysAgo(ctx, fips, 14, "Cases", historical)
 	if err != nil {
+		sentry.CaptureException(err)
 		return err
 	}
 	daysAgo1Cases, err := getCasesFromDaysAgo(ctx, fips, 1, "Cases", historical)
 	if err != nil {
+		sentry.CaptureException(err)
 		return err
 	}
 	daysAgo1Deaths, err := getCasesFromDaysAgo(ctx, fips, 1, "Deaths", historical)
 	if err != nil {
+		sentry.CaptureException(err)
 		return err
 	}
 	daysAgo15Cases, err := getCasesFromDaysAgo(ctx, fips, 15, "Cases", historical)
 	if err != nil {
+		sentry.CaptureException(err)
 		return err
 	}
 	daysAgo25Cases, err := getCasesFromDaysAgo(ctx, fips, 25, "Cases", historical)
 	if err != nil {
+		sentry.CaptureException(err)
 		return err
 	}
 	daysAgo26Cases, err := getCasesFromDaysAgo(ctx, fips, 26, "Cases", historical)
 	if err != nil {
+		sentry.CaptureException(err)
 		return err
 	}
 	daysAgo49Cases, err := getCasesFromDaysAgo(ctx, fips, 49, "Cases", historical)
 	if err != nil {
+		sentry.CaptureException(err)
 		return err
 	}
 
@@ -162,6 +183,7 @@ func getCasesFromDaysAgo(ctx context.Context, fips string, daysAgo int, fieldNam
 	today := time.Now()
 	location, err := time.LoadLocation("America/New_York")
 	if err != nil {
+		sentry.CaptureException(err)
 		panic(err)
 	}
 
@@ -175,6 +197,7 @@ func getCasesFromDaysAgo(ctx context.Context, fips string, daysAgo int, fieldNam
 
 	docsnap, err := cases.Doc(fips + "_" + date).Get(ctx)
 	if err != nil {
+		sentry.CaptureException(err)
 		return 0, err
 	}
 
@@ -185,6 +208,7 @@ func fetchNumericFieldFromDoc(doc *firestore.DocumentSnapshot, fieldName string)
 	data, err := doc.DataAt(fieldName)
 
 	if err != nil {
+		sentry.CaptureException(err)
 		panic(err)
 	}
 
@@ -193,6 +217,7 @@ func fetchNumericFieldFromDoc(doc *firestore.DocumentSnapshot, fieldName string)
 	i, err := strconv.Atoi(cast)
 
 	if err != nil {
+		sentry.CaptureException(err)
 		return 0, err
 	}
 
@@ -202,6 +227,7 @@ func fetchNumericFieldFromDoc(doc *firestore.DocumentSnapshot, fieldName string)
 func getLiveNumbers(ctx context.Context, fips string, doc *firestore.DocumentRef) (int, int, error) {
 	docsnap, err := doc.Get(ctx)
 	if err != nil {
+		sentry.CaptureException(err)
 		panic(err)
 	}
 
@@ -209,6 +235,7 @@ func getLiveNumbers(ctx context.Context, fips string, doc *firestore.DocumentRef
 	rawDeaths, err := fetchNumericFieldFromDoc(docsnap, "Deaths")
 
 	if err != nil {
+		sentry.CaptureException(err)
 		return 0, 0, err
 	}
 
@@ -220,6 +247,7 @@ func createDBClient(ctx context.Context) (*firestore.Client, error) {
 
 	client, err := firestore.NewClient(ctx, projectID)
 	if err != nil {
+		sentry.CaptureException(err)
 		return nil, err
 	}
 
