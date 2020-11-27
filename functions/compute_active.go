@@ -42,17 +42,6 @@ func storeActiveCases(ctx context.Context, collectionPrefix string) error {
 		return err
 	}
 
-	location, err := time.LoadLocation("America/New_York")
-	if err != nil {
-		sentry.CaptureException(err)
-		panic(err)
-	}
-
-	fmt.Println("------------ TIME ZONE INFO ----------------")
-	fmt.Println("time.Now", time.Now())
-	fmt.Println("time.UTC", time.Now().UTC())
-	fmt.Println("time.In(EST)", time.Now().In(location))
-
 	iter := db.Collection(fmt.Sprintf("%s-live", collectionPrefix)).Documents(ctx)
 	defer iter.Stop()
 	wg := sync.WaitGroup{}
@@ -71,15 +60,15 @@ func storeActiveCases(ctx context.Context, collectionPrefix string) error {
 		doc.DataTo(&row)
 
 		wg.Add(1)
-
-		go func(row computedRow) {
+		go func() {
+			fmt.Print(".")
 			if err := calculateActiveCases(ctx, collectionPrefix, row); err != nil {
 				fmt.Println("failed to calculate active cases for", row.State, row.County)
 				fmt.Println(err)
 				sentry.CaptureException(err)
 			}
 			wg.Done()
-		}(row)
+		}()
 	}
 	wg.Wait()
 
@@ -98,55 +87,28 @@ func calculateActiveCases(ctx context.Context, collectionPrefix string, row comp
 	live := db.Collection(collectionPrefix + "-live").Doc(fips)
 	api := db.Collection(collectionPrefix + "-api").Doc(fips)
 
-	currentCases, deaths, err := getLiveNumbers(ctx, fips, live)
-	if err != nil {
-		sentry.CaptureException(err)
-		return err
-	}
-	daysAgo14Cases, err := getCasesFromDaysAgo(ctx, fips, 14, "Cases", historical)
-	if err != nil {
-		sentry.CaptureException(err)
-		return err
-	}
-	daysAgo1Cases, err := getCasesFromDaysAgo(ctx, fips, 1, "Cases", historical)
-	if err != nil {
-		sentry.CaptureException(err)
-		return err
-	}
-	daysAgo1Deaths, err := getCasesFromDaysAgo(ctx, fips, 1, "Deaths", historical)
-	if err != nil {
-		sentry.CaptureException(err)
-		return err
-	}
-	daysAgo15Cases, err := getCasesFromDaysAgo(ctx, fips, 15, "Cases", historical)
-	if err != nil {
-		sentry.CaptureException(err)
-		return err
-	}
-	daysAgo25Cases, err := getCasesFromDaysAgo(ctx, fips, 25, "Cases", historical)
-	if err != nil {
-		sentry.CaptureException(err)
-		return err
-	}
-	daysAgo26Cases, err := getCasesFromDaysAgo(ctx, fips, 26, "Cases", historical)
-	if err != nil {
-		sentry.CaptureException(err)
-		return err
-	}
-	daysAgo49Cases, err := getCasesFromDaysAgo(ctx, fips, 49, "Cases", historical)
+	currentCases, deaths, err := getCurrentNumbers(ctx, fips, live)
 	if err != nil {
 		sentry.CaptureException(err)
 		return err
 	}
 
+	results, err := getRelevantHistoricalCases(ctx, fips, historical)
+	if err != nil {
+		sentry.CaptureException(err)
+		return err
+	}
+
+	inputs := buildInputs(results)
 	activeCaseCount := computeActiveCaseCount(currentCases,
-		daysAgo14Cases,
-		daysAgo15Cases,
-		daysAgo25Cases,
-		daysAgo26Cases,
-		daysAgo49Cases,
+		inputs[14].value,
+		inputs[15].value,
+		inputs[25].value,
+		inputs[26].value,
+		inputs[49].value,
 		deaths)
 
+	// Create new entry into <resource>-api collection
 	if _, err = api.Set(ctx, map[string]interface{}{
 		"Date":            row.Date,
 		"County":          row.County,
@@ -160,14 +122,63 @@ func calculateActiveCases(ctx context.Context, collectionPrefix string, row comp
 		"ProbableDeaths":  row.ProbableDeaths,
 		// Calculated fields
 		"ActiveCases":    activeCaseCount,
-		"NewCasesToday":  currentCases - daysAgo1Cases,
-		"NewDeathsToday": deaths - daysAgo1Deaths,
+		"NewCasesToday":  currentCases - inputs[1].value,
+		"NewDeathsToday": deaths - inputs[1].deaths,
 	}, firestore.MergeAll); err != nil {
 		sentry.CaptureException(err)
 		panic(err)
 	}
 
 	return nil
+}
+
+type calculation struct {
+	value  int
+	deaths int
+	score  int
+}
+
+func buildInputs(rows []historicalRow) map[int]calculation {
+	today := time.Now()
+	targetDays := []int{1, 14, 15, 25, 26, 49}
+	calculations := make(map[int]calculation)
+
+	for _, row := range rows {
+		t, _ := time.Parse(layoutISO, row.Date)
+
+		// Days between today and current row
+		dayDiff := today.Sub(t).Hours() / 24
+
+		for _, targetDay := range targetDays {
+			// the close the day diff is to the targetDay, the better(lower) the score
+			score := int(dayDiff) - targetDay
+			if score < 0 {
+				score = -score
+			}
+
+			cases, err := strconv.Atoi(row.Cases)
+			if err != nil {
+				continue
+			}
+
+			deaths, err := strconv.Atoi(row.Deaths)
+			if err != nil {
+				continue
+			}
+
+			_, ok := calculations[targetDay]
+			// each iteration, if we've found a day that's closer to our desired day difference, we update it
+			if !ok || score < calculations[targetDay].score {
+				calculations[targetDay] = calculation{
+					value:  cases,
+					deaths: deaths,
+					score:  score,
+				}
+			}
+		}
+	}
+
+	return calculations
 }
 
 // active case algorithm, taken from:
@@ -178,48 +189,39 @@ func computeActiveCaseCount(current, days14, days15, days25, days26, days49, dea
 	)
 }
 
-func getCasesFromDaysAgo(ctx context.Context, fips string, daysAgo int, fieldName string, cases *firestore.CollectionRef) (int, error) {
-	today := time.Now()
+func getRelevantHistoricalCases(ctx context.Context, fips string, cases *firestore.CollectionRef) ([]historicalRow, error) {
+	var relevantCases []historicalRow
+	t := time.Now().Format(layoutISO)
 
-	location, err := time.LoadLocation("America/New_York")
-	if err != nil {
-		sentry.CaptureException(err)
-		panic(err)
+	it := cases.
+		Where("Date", "<=", t).
+		Where("Fips", "==", fips).
+		Limit(50).
+		OrderBy("Date", firestore.Desc).
+		Documents(ctx)
+
+	for {
+		doc, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			panic(err)
+		}
+
+		var report historicalRow
+		err = doc.DataTo(&report)
+		if err != nil {
+			panic(err)
+		}
+
+		relevantCases = append(relevantCases, report)
 	}
 
-	today = today.In(location)
-
-	date := today.AddDate(0, 0, -daysAgo).Format(layoutISO)
-
-	docsnap, err := cases.Doc(fips + "_" + date).Get(ctx)
-	if err != nil {
-		fmt.Println("failed to fetch case numbers for", fips+"_"+date)
-		sentry.CaptureException(err)
-		return 0, err
-	}
-
-	return fetchNumericFieldFromDoc(docsnap, fieldName)
+	return relevantCases, nil
 }
 
-func fetchNumericFieldFromDoc(doc *firestore.DocumentSnapshot, fieldName string) (int, error) {
-	data, err := doc.DataAt(fieldName)
-	if err != nil {
-		sentry.CaptureException(err)
-		panic(err)
-	}
-
-	cast := data.(string)
-
-	i, err := strconv.Atoi(cast)
-	if err != nil {
-		sentry.CaptureException(err)
-		return 0, err
-	}
-
-	return i, nil
-}
-
-func getLiveNumbers(ctx context.Context, fips string, doc *firestore.DocumentRef) (int, int, error) {
+func getCurrentNumbers(ctx context.Context, fips string, doc *firestore.DocumentRef) (int, int, error) {
 	docsnap, err := doc.Get(ctx)
 	if err != nil {
 		fmt.Println("failed to fetch live numbers", fips)
@@ -227,19 +229,19 @@ func getLiveNumbers(ctx context.Context, fips string, doc *firestore.DocumentRef
 		panic(err)
 	}
 
-	rawCases, err := fetchNumericFieldFromDoc(docsnap, "Cases")
+	var d liveRow
+	docsnap.DataTo(&d)
+
+	cases, err := strconv.Atoi(d.Cases)
 	if err != nil {
-		fmt.Println("failed to fetch live cases", fips)
-		sentry.CaptureException(err)
 		return 0, 0, err
 	}
 
-	rawDeaths, err := fetchNumericFieldFromDoc(docsnap, "Deaths")
+	// FIXME: Puerto Rico live data doesnt report deaths
+	deaths, err := strconv.Atoi(d.Deaths)
 	if err != nil {
-		fmt.Println("failed to fetch live deaths", fips)
-		sentry.CaptureException(err)
 		return 0, 0, err
 	}
 
-	return rawCases, rawDeaths, nil
+	return cases, deaths, nil
 }

@@ -67,6 +67,7 @@ func importHistorical(scope string, collectionName string, url string, processRo
 
 	wg := sync.WaitGroup{}
 
+	batch := db.Batch()
 	for {
 		data, err := reader.Read()
 		if err == io.EOF {
@@ -86,13 +87,9 @@ func importHistorical(scope string, collectionName string, url string, processRo
 		wg.Add(1)
 		go func(d []string, w *sync.WaitGroup) {
 			row := processRow(d)
+			doc := db.Collection(collectionName).Doc(row.Fips + "_" + row.Date)
 
-			collection := db.Collection(collectionName)
-			if _, err := collection.Doc(row.Fips+"_"+row.Date).Set(ctx, row); err != nil {
-				fmt.Println("failed to write document", collectionName)
-				sentry.CaptureException(err)
-				panic(err)
-			}
+			batch.Set(doc, row)
 			w.Done()
 		}(data, &wg)
 	}
@@ -110,6 +107,11 @@ func importHistorical(scope string, collectionName string, url string, processRo
 	}
 
 	wg.Wait()
+
+	if _, err := batch.Commit(ctx); err != nil {
+		sentry.CaptureException(err)
+		fmt.Println("failed to write all documents")
+	}
 	return nil
 }
 
