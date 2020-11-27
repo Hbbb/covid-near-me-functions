@@ -19,23 +19,43 @@ const (
 
 // StoreActiveCasesForState Cloud Function
 func StoreActiveCasesForState(ctx context.Context, message interface{}) error {
-	return storeActiveCases(ctx, "states")
-}
-
-// StoreActiveCasesForCounty Cloud Function
-func StoreActiveCasesForCounty(ctx context.Context, message interface{}) error {
-	return storeActiveCases(ctx, "counties")
-}
-
-func storeActiveCases(ctx context.Context, collectionPrefix string) error {
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn: os.Getenv("SENTRY_DSN"),
 	})
 	if err != nil {
 		panic(err)
 	}
+	defer sentry.Recover()
 	defer sentry.Flush(2 * time.Second)
 
+	err = storeActiveCases(ctx, "states")
+	if err != nil {
+		panic(err)
+	}
+
+	return nil
+}
+
+// StoreActiveCasesForCounty Cloud Function
+func StoreActiveCasesForCounty(ctx context.Context, message interface{}) error {
+	err := sentry.Init(sentry.ClientOptions{
+		Dsn: os.Getenv("SENTRY_DSN"),
+	})
+	if err != nil {
+		panic(err)
+	}
+	defer sentry.Recover()
+	defer sentry.Flush(2 * time.Second)
+
+	err = storeActiveCases(ctx, "counties")
+	if err != nil {
+		panic(err)
+	}
+
+	return nil
+}
+
+func storeActiveCases(ctx context.Context, collectionPrefix string) error {
 	db, err := createDBClient(ctx)
 	if err != nil {
 		sentry.CaptureException(err)
@@ -60,48 +80,44 @@ func storeActiveCases(ctx context.Context, collectionPrefix string) error {
 		doc.DataTo(&row)
 
 		wg.Add(1)
-		go func() {
-			if err := calculateActiveCases(ctx, collectionPrefix, row); err != nil {
-				fmt.Println("failed to calculate active cases for", row.State, row.County)
-				fmt.Println(err)
-				sentry.CaptureException(err)
+		go func(hub *sentry.Hub) {
+			hub.ConfigureScope(func(scope *sentry.Scope) {
+				scope.SetTag("fips", row.Fips)
+				scope.SetTag("state", row.State)
+				scope.SetTag("county", row.County)
+			})
+
+			if err := calculateActiveCases(ctx, db, collectionPrefix, row); err != nil {
+				fmt.Println("failed to calculate and store active cases for", row.Fips, row.State, row.County)
+				hub.CaptureException(err)
 			}
 			wg.Done()
-		}()
+		}(sentry.CurrentHub().Clone())
 	}
 	wg.Wait()
 
 	return nil
 }
 
-func calculateActiveCases(ctx context.Context, collectionPrefix string, row computedRow) error {
-	db, err := createDBClient(ctx)
-	if err != nil {
-		sentry.CaptureException(err)
-		panic(err)
-	}
-
-	fips := row.Fips
+func calculateActiveCases(ctx context.Context, db *firestore.Client, collectionPrefix string, row computedRow) error {
 	historical := db.Collection(collectionPrefix + "-historical")
-	live := db.Collection(collectionPrefix + "-live").Doc(fips)
-	api := db.Collection(collectionPrefix + "-api").Doc(fips)
+	live := db.Collection(collectionPrefix + "-live").Doc(row.Fips)
+	api := db.Collection(collectionPrefix + "-api").Doc(row.Fips)
 
-	currentCases, deaths, err := getCurrentNumbers(ctx, fips, live)
+	currentCases, deaths, err := getCurrentNumbers(ctx, row.Fips, live)
 	if err != nil {
-		sentry.CaptureException(err)
 		return err
 	}
 
+	// FIXME: This assumes there will always be deaths everywhere. Is that fair?
 	calculatedDeaths := false
-
 	if deaths == 0 {
 		calculatedDeaths = true
 		deaths = int(float32(currentCases) * 0.01)
 	}
 
-	results, err := getRelevantHistoricalCases(ctx, fips, historical)
+	results, err := getRelevantHistoricalCases(ctx, row.Fips, historical)
 	if err != nil {
-		sentry.CaptureException(err)
 		return err
 	}
 
@@ -142,8 +158,7 @@ func calculateActiveCases(ctx context.Context, collectionPrefix string, row comp
 		"NewDeathsToday":   newDeathsToday,
 		"Score":            inputs[14].score + inputs[15].score + inputs[25].score + inputs[26].score + inputs[49].score,
 	}, firestore.MergeAll); err != nil {
-		sentry.CaptureException(err)
-		panic(err)
+		return err
 	}
 
 	return nil
@@ -223,13 +238,13 @@ func getRelevantHistoricalCases(ctx context.Context, fips string, cases *firesto
 			break
 		}
 		if err != nil {
-			panic(err)
+			return relevantCases, err
 		}
 
 		var report historicalRow
 		err = doc.DataTo(&report)
 		if err != nil {
-			panic(err)
+			return relevantCases, err
 		}
 
 		relevantCases = append(relevantCases, report)
@@ -241,9 +256,7 @@ func getRelevantHistoricalCases(ctx context.Context, fips string, cases *firesto
 func getCurrentNumbers(ctx context.Context, fips string, doc *firestore.DocumentRef) (int, int, error) {
 	docsnap, err := doc.Get(ctx)
 	if err != nil {
-		fmt.Println("failed to fetch live numbers", fips)
-		sentry.CaptureException(err)
-		panic(err)
+		return 0, 0, fmt.Errorf("failed to lookup document with current numbers - %e", err)
 	}
 
 	var d liveRow
@@ -254,7 +267,6 @@ func getCurrentNumbers(ctx context.Context, fips string, doc *firestore.Document
 		return 0, 0, err
 	}
 
-	// FIXME: Puerto Rico live data doesnt report deaths
 	deaths, err := strconv.Atoi(d.Deaths)
 	if err != nil {
 		return cases, 0, nil
