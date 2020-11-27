@@ -87,6 +87,11 @@ func importHistorical(scope string, collectionName string, url string, processRo
 		wg.Add(1)
 		go func(d []string, w *sync.WaitGroup) {
 			row := processRow(d)
+
+			if row.County == "New York City" {
+				row.Fips = "NYC"
+			}
+
 			doc := db.Collection(collectionName).Doc(row.Fips + "_" + row.Date)
 
 			batch.Set(doc, row)

@@ -75,6 +75,10 @@ func importLive(collectionName string, url string, processRow processor) error {
 		go func(d []string, w *sync.WaitGroup) {
 			row := processRow(d)
 
+			if row.County == "New York City" {
+				row.Fips = "NYC"
+			}
+
 			if len(row.Fips) == 0 {
 				wg.Done()
 				return
