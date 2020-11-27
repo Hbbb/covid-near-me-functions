@@ -93,6 +93,13 @@ func calculateActiveCases(ctx context.Context, collectionPrefix string, row comp
 		return err
 	}
 
+	calculatedDeaths := false
+
+	if deaths == 0 {
+		calculatedDeaths = true
+		deaths = int(float32(currentCases) * 0.01)
+	}
+
 	results, err := getRelevantHistoricalCases(ctx, fips, historical)
 	if err != nil {
 		sentry.CaptureException(err)
@@ -100,13 +107,21 @@ func calculateActiveCases(ctx context.Context, collectionPrefix string, row comp
 	}
 
 	inputs := buildInputs(results)
-	activeCaseCount := computeActiveCaseCount(currentCases,
+	activeCaseCount := computeActiveCaseCount(
+		currentCases,
 		inputs[14].value,
 		inputs[15].value,
 		inputs[25].value,
 		inputs[26].value,
 		inputs[49].value,
-		deaths)
+		deaths,
+	)
+
+	newDeathsToday := deaths - inputs[1].deaths
+
+	if calculatedDeaths {
+		newDeathsToday = 0
+	}
 
 	// Create new entry into <resource>-api collection
 	if _, err = api.Set(ctx, map[string]interface{}{
@@ -120,10 +135,13 @@ func calculateActiveCases(ctx context.Context, collectionPrefix string, row comp
 		"ConfirmedDeaths": row.ConfirmedDeaths,
 		"ProbableCases":   row.ProbableCases,
 		"ProbableDeaths":  row.ProbableDeaths,
+
 		// Calculated fields
-		"ActiveCases":    activeCaseCount,
-		"NewCasesToday":  currentCases - inputs[1].value,
-		"NewDeathsToday": deaths - inputs[1].deaths,
+		"CalculatedDeaths": calculatedDeaths,
+		"ActiveCases":      activeCaseCount,
+		"NewCasesToday":    currentCases - inputs[1].value,
+		"NewDeathsToday":   newDeathsToday,
+		"Score":            inputs[14].score + inputs[15].score + inputs[25].score + inputs[26].score + inputs[49].score,
 	}, firestore.MergeAll); err != nil {
 		sentry.CaptureException(err)
 		panic(err)
@@ -240,7 +258,7 @@ func getCurrentNumbers(ctx context.Context, fips string, doc *firestore.Document
 	// FIXME: Puerto Rico live data doesnt report deaths
 	deaths, err := strconv.Atoi(d.Deaths)
 	if err != nil {
-		return 0, 0, err
+		return cases, 0, nil
 	}
 
 	return cases, deaths, nil

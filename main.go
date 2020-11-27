@@ -9,6 +9,7 @@ import (
 func main() {
 	ctx := context.Background()
 	funcs.StoreActiveCasesForCounty(ctx, map[string]interface{}{})
+	// funcs.ImportLiveCounties(ctx, map[string]interface{}{})
 
 	// loc, err := time.LoadLocation("America/New_York")
 	// if err != nil {
